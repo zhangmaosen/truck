@@ -11,7 +11,9 @@ import pdb
 
 from requests.auth import HTTPBasicAuth
 # logging.basicConfig(level=logging.WARNING)
-truckInfoFile = 'truckInfoData'
+truckInfoFile = 'truckInfoDataTest'
+# truckInfoFile = 'truckInfoData'
+truckHistFile = 'truckHistDataTest'
 checkPointFile = '_checkPoint'
 
 auth = HTTPBasicAuth('jhn_admin', 'jhnBJ74110')
@@ -41,22 +43,25 @@ def getCheckPoint(truckNo):
     fn = truckNo + checkPointFile
     if os.path.exists(fn):
         f = io.open(truckNo + checkPointFile, 'r')
-        ts = f.readline()
+        cp = json.load(f)
+        ts = cp['checkTime']
+        itor = cp['itor']
         ts = datetime.datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f')
+        ccp = {'checkTime': ts, 'itor': itor}
     else:
-        ts = datetime.datetime.now()
-    return ts
+        ccp = {'checkTime': datetime.datetime.now(), 'itor': 0}
+    return cpp
 
 
 def saveCheckPoint(truckNo, checkTime, itor):
     f = io.open(truckNo + checkPointFile, 'w', encoding='utf-8')
-    cp = {'checkTime':checkTime, 'itor':itor}
-    f.write(unicode(cp))
+    cp = {'checkTime': checkTime, 'itor': itor}
+    f.write(unicode(json.dump(dict)))
     f.close()
 
 
 def save2File(fileName, jsonData):
-    f = io.open('truckHistData/' + fileName, 'w', encoding='utf8')
+    f = io.open(truckHistFile + '/' + fileName, 'w', encoding='utf8')
     f.write(unicode(json.dumps(jsonData, indent=4, ensure_ascii=False)))
     f.close()
 
@@ -110,12 +115,12 @@ def getAjaxData(formData, startTime, endTime):
     return r.json()
 
 
-def getHistData(truckNo, truckInfo, startTime, nTimes):
+def getHistData(truckNo, truckInfo, startTime, nTimes, cp):
     formData = getFormData(truckNo, truckInfo)
 
     lastTime = startTime
 
-    for itor in range(nTimes):
+    for itor in range(cp['itor'], nTimes):
         st = lastTime - delta
         et = lastTime
         formData['begintime'] = st
@@ -146,9 +151,9 @@ for file in files:
     trucksInfo = jsonData['data']['result']
 
     for iid in trucksInfo:
-        sTime = getCheckPoint(truckNo=iid)
-        logging.warning(iid + ' get data start at' + str(sTime))
-        getHistData(iid, trucksInfo[iid], sTime, nTimes)
+        cp = getCheckPoint(truckNo=iid)
+        logging.warning(iid + ' get data start at' + str(cp['checkTime']))
+        getHistData(iid, trucksInfo[iid], sTime, nTimes, cp)
  # save truck info data
 
 
