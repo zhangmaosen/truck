@@ -7,7 +7,7 @@ import logging
 client = MongoClient('localhost', 27017)
 db = client.truckDB
 
-truckInfo = db.truckInfo
+truckInfo = db.truckInfoNew
 
 # tt = {'name': 'maosen'}
 
@@ -29,3 +29,4 @@ for f in os.listdir(truckDataFiles):
     for detail in details:
         detail.update(truckNo)
         truckInfo.insert_one(detail)
+

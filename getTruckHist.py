@@ -11,9 +11,10 @@ import pdb
 
 from requests.auth import HTTPBasicAuth
 # logging.basicConfig(level=logging.WARNING)
-truckInfoFile = 'truckInfoDataTest'
-# truckInfoFile = 'truckInfoData'
-truckHistFile = 'truckHistDataTest'
+truckInfoDir = 'truckInfoDataTest'
+# truckInfoDir = 'truckInfoData'
+truckHistDir = 'truckHistDataTest'
+checkPointDir = 'checkPointTest'
 checkPointFile = '_checkPoint'
 
 auth = HTTPBasicAuth('jhn_admin', 'jhnBJ74110')
@@ -25,6 +26,7 @@ cookies = dict(_TOKEN=_TOKEN)
 nTimes = 100
 pageSize = 1000
 delta = datetime.timedelta(days=1)
+sleepTime = 0
 
 # login = {'username':'jhn_admin','passwd':'jhnBJ74110'}
 # loginURL =
@@ -39,10 +41,20 @@ token = tokenFile.readline()
 cookies = dict(_TOKEN=_TOKEN)
 
 
+def init():
+    if not os.path.exists(truckHistDir):
+        os.mkdir(truckHistDir)
+    if not os.path.exists(checkPointDir):
+        os.mkdir(checkPointDir)
+
+
 def getCheckPoint(truckNo):
-    fn = truckNo + checkPointFile
+    fn = checkPointDir + '/' + truckNo + checkPointFile
+    ccp = {}
+    logging.warning(' Get checkpoint file: ' + fn)
+    # pdb.set_trace()
     if os.path.exists(fn):
-        f = io.open(truckNo + checkPointFile, 'r')
+        f = io.open(fn, 'r')
         cp = json.load(f)
         ts = cp['checkTime']
         itor = cp['itor']
@@ -50,23 +62,24 @@ def getCheckPoint(truckNo):
         ccp = {'checkTime': ts, 'itor': itor}
     else:
         ccp = {'checkTime': datetime.datetime.now(), 'itor': 0}
-    return cpp
+    return ccp
 
 
 def saveCheckPoint(truckNo, checkTime, itor):
-    f = io.open(truckNo + checkPointFile, 'w', encoding='utf-8')
-    cp = {'checkTime': checkTime, 'itor': itor}
-    f.write(unicode(json.dump(dict)))
+    fn = checkPointDir + '/' + truckNo + checkPointFile
+    f = io.open(fn, 'w', encoding='utf-8')
+    cp = {'checkTime': str(checkTime), 'itor': itor}
+    f.write(unicode(json.dumps(cp)))
     f.close()
 
 
 def save2File(fileName, jsonData):
-    f = io.open(truckHistFile + '/' + fileName, 'w', encoding='utf8')
+    f = io.open(truckHistDir + '/' + fileName, 'w', encoding='utf8')
     f.write(unicode(json.dumps(jsonData, indent=4, ensure_ascii=False)))
     f.close()
 
 
-def getAllTruckInfoFile(fileName):
+def getAlltruckInfoDir(fileName):
     return os.listdir(os.getcwd() + '/' + fileName)
 
 
@@ -127,9 +140,9 @@ def getHistData(truckNo, truckInfo, startTime, nTimes, cp):
         formData['endtime'] = et
 
         truckData = getAllAjaxData(formData, st, et)
-        saveCheckPoint(truckNo, st)
+        saveCheckPoint(truckNo, st, itor)
         # pdb.set_trace()
-        time.sleep(1)
+        time.sleep(sleepTime)
         logging.debug('get ajax data' + str(truckData))
         if(isNoData(truckData)):
             logging.warning('no data get!')
@@ -138,20 +151,21 @@ def getHistData(truckNo, truckInfo, startTime, nTimes, cp):
         lastTime = st
 
 
-files = getAllTruckInfoFile(truckInfoFile)
+files = getAlltruckInfoDir(truckInfoDir)
 
 logging.info('read list files: ' + ' '.join(files))
-
+init()
 
 for file in files:
     logging.info('read truckinfo from file: ' + file)
-    data = io.open(truckInfoFile + '/' + file, 'r', encoding='utf8')
+    data = io.open(truckInfoDir + '/' + file, 'r', encoding='utf8')
     jsonData = json.load(data)
 
     trucksInfo = jsonData['data']['result']
 
     for iid in trucksInfo:
         cp = getCheckPoint(truckNo=iid)
+        sTime = cp['checkTime']
         logging.warning(iid + ' get data start at' + str(cp['checkTime']))
         getHistData(iid, trucksInfo[iid], sTime, nTimes, cp)
  # save truck info data
