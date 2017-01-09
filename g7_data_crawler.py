@@ -8,6 +8,8 @@ import datetime
 import urllib
 import pdb
 from requests.auth import HTTPBasicAuth
+import sys
+import getopt
 
 
 class G7Login:
@@ -58,18 +60,18 @@ class G7Login:
 
 class G7DataCrawler():
     # TEST dir
-    TestDir = 'test/'
+    Dir = 'test'
 
     # for truck crawler
     truck_url = 'http://g7s.truck.huoyunren.com/inside.php?t=json&m=map'
     trucks_info_param = dict(f='getAllTruckInfo')
     trucks_info_form = {'pageNo': '1', 'pageSize': '400', 'type': 'truck'}
-    trucks_info_data_dir = TestDir + 'trucks_info_data/'
-
+    trucks_info_data_dir = ''
     # for track crawler
-    trucks_track_data_dir = TestDir + 'trucks_track_data/'
+
     trucks_track_param = dict(f='gethistory')
     trucks_track_form = dict()
+    trucks_track_data_dir = ''
 
     #
     trucks_track_file_prefix = 'track_'
@@ -85,11 +87,16 @@ class G7DataCrawler():
         fn.write(unicode(json.dumps(json_data)))
         fn.write(unicode('\n'))
 
-    def make_data_dir(self, dir):
-        if not os.path.exists(dir):
-            os.mkdir(dir)
+    def make_data_dir(self, data_dir):
+        if not os.path.exists(data_dir):
+            os.mkdir(data_dir)
 
-    def __init__(self):
+    def __init__(self, data_dir=None):
+        if data_dir is not None:
+            self.Dir = 'data'
+        self.trucks_info_data_dir = data_dir + '/trucks_info_data/'
+        # for track crawler
+        self.trucks_track_data_dir = data_dir + '/trucks_track_data/'
         self.make_data_dir(self.trucks_info_data_dir)
         self.make_data_dir(self.trucks_track_data_dir)
 
@@ -122,7 +129,7 @@ class G7DataCrawler():
         self.fleets_cnt = int(fleets_count)
         return int(fleets_count)
 
-    def crawl_trucks_track(self, g7_login, n_delta=1):
+    def crawl_trucks_track(self, g7_login, n_delta=1, l_time=None):
         for file in os.listdir(self.trucks_info_data_dir):
             fn = self.trucks_info_data_dir + file
             logging.warning('truck info file name is: ' + fn)
@@ -131,13 +138,20 @@ class G7DataCrawler():
                 truck = dict()
                 logging.warning('truck info is: ' + line)
                 truck = json.loads(line)
-                self.crawl_truck_all_track(g7_login, truck, n_delta)
+                if l_time is None:
+                    last_time = datetime.datetime.now()
+                else:
+                    last_time = datetime.datetime.strptime(
+                        l_time, '%Y-%m-%d')
+                self.crawl_truck_all_track(
+                    g7_login, truck, n_delta=n_delta, last_time=last_time)
             f.close()
 
-    def crawl_truck_all_track(self, g7_login, truck, n_delta):
-        now = datetime.datetime.now()
+    # def crawl_trucks_track_check_point(self, )
+    def crawl_truck_all_track(self, g7_login, truck, n_delta=1,
+                              last_time=datetime.datetime.now()):
         delta = datetime.timedelta(days=1)
-        last_time = now
+
         for i in range(n_delta):
             s_time = last_time - delta
             e_time = last_time
@@ -146,14 +160,15 @@ class G7DataCrawler():
                 self.trucks_track_file_prefix + \
                 truck['truck_no'] + '_' + \
                 last_time.strftime("%Y_%m_%d_%H_%M") + '.json'
-            f = io.open(fn, 'w', encoding='utf8')
+
             r = self.crawl_truck_track(
                 g7_login=g7_login, truck=truck, s_time=s_time, e_time=e_time)
             tracks = r['data']['result']['detail']
-
-            for track in tracks:
-                self.save_data(f, track)
-            f.close()
+            if tracks != []:
+                f = io.open(fn, 'w', encoding='utf8')
+                for track in tracks:
+                    self.save_data(f, track)
+                f.close()
             last_time = s_time
 
     def crawl_truck_track(self, g7_login, truck,
@@ -165,7 +180,11 @@ class G7DataCrawler():
             params=self.trucks_track_param,
             form_data=self.trucks_track_form)
         logging.debug('truck track data: ' + str(r))
-        detail = r['data']['result']['detail']
+
+        if 'data' in r:
+            detail = r['data']['result']['detail']
+        else:
+            logging.critical('data crawl wrong! response is: ' + str(r))
         if len(detail) == page_size:
             s_time = datetime.datetime.fromtimestamp(
                 detail[page_size - 1]['timestamp'])
@@ -193,8 +212,50 @@ class G7DataCrawler():
         self.trucks_track_form['endtime'] = e_time
 
 
-g7_login = G7Login()
-logging.debug(str(g7_login))
+def usage():
+    print "-d --data_dir: data dir"
+    print "-t --start_time: crawl time start at"
+    print "-c --crawl_days: crawl N days data"
 
-g7_crawler = G7DataCrawler()
-g7_crawler.crawl_trucks_track(g7_login, n_delta=90)
+
+def main():
+    data_dir = ''
+    start_time = ''
+    crawl_days = 0
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "hd:t:c:", [
+                                   "help", "start_time=",
+                                   "data_dir=", "crawl_days="])
+    except getopt.GetoptError as err:
+        # print help information and exit:
+        print str(err)  # will print something like "option -a not recognized"
+        usage()
+        sys.exit(2)
+
+    if len(opts) == 0:
+        usage()
+        sys.exit(2)
+
+    for o, a in opts:
+        if o in ("-d", "--data_dir"):
+            data_dir = a
+        elif o in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif o in ("-t", "--start_time"):
+            start_time = a
+        elif o in ("-c", "--crawl_days"):
+            crawl_days = int(a)
+        else:
+            assert False, "unhandled option"
+            sys.exit(2)
+    # ...
+    g7_login = G7Login()
+    logging.debug(str(g7_login))
+
+    g7_crawler = G7DataCrawler(data_dir)
+    g7_crawler.crawl_trucks_track(
+        g7_login, l_time=start_time, n_delta=crawl_days)
+
+
+main()
