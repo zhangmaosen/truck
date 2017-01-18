@@ -4,11 +4,22 @@ import sys
 import getopt
 import logging
 import io
+import csv
 
 
 def usage():
     print "-d --data_dir: data dir"
     print "-p --file_pattern: input file pattern"
+
+
+def load_crawl_job(fname):
+    crawl_jobs = []
+    logging.warning('begin load crawl job file %s', fname)
+    with open(fname, 'rb') as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            crawl_jobs.append(row)
+    return crawl_jobs
 
 
 def load_sample_trucks(fname, is_header=False):

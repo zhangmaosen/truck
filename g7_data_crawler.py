@@ -177,7 +177,6 @@ class G7DataCrawler():
                 else:
                     last_time = datetime.datetime.strptime(
                         l_time, '%Y-%m-%d')
-
                 if sample_truck is not None:
                     logging.warning("sample crawling begin!")
                     if truck['truck_no'] in sample_truck:
@@ -191,11 +190,40 @@ class G7DataCrawler():
                         g7_login, truck, n_delta=n_delta, last_time=last_time)
             f.close()
 
+    def crawl_trucks_track2(self, g7_login,
+                            n_delta=1, l_time=None, sample_truck=None):
+        self.progress = CrawlerJobProgress(
+            'track_data_crawler_' + str(l_time), l_time)
+        trucks = {}
+        for file in os.listdir(self.trucks_info_data_dir):
+            fn = self.trucks_info_data_dir + file
+            logging.warning('truck info file name is: ' + fn)
+            f = io.open(fn, 'r', encoding='utf-8')
+            for line in f.readlines():
+                # logging.warning('truck info is: ' + line)
+                t = json.loads(line)
+                trucks.update({t['truck_no']: t})
+            f.close()
+
+        if l_time is None:
+            last_time = datetime.datetime.now()
+        else:
+            last_time = datetime.datetime.strptime(
+                l_time, '%Y-%m-%d')
+
+        for s_truck in sample_truck:
+            logging.warning("sample crawling begin!")
+            logging.warning("crawl sample truck " +
+                            trucks[s_truck]['truck_no'] + "\'s track data")
+            self.crawl_truck_all_track(
+                g7_login, trucks[s_truck], n_delta=n_delta,
+                last_time=last_time)
+
     # def crawl_trucks_track_check_point(self, )
     def crawl_truck_all_track(self, g7_login, truck, n_delta=1,
                               last_time=datetime.datetime.now()):
         delta = datetime.timedelta(days=1)
-
+        retry_cnt = 0
         for i in range(n_delta):
             s_time = last_time - delta
             e_time = last_time
@@ -205,10 +233,18 @@ class G7DataCrawler():
                 truck['truck_no'] + '_' + \
                 last_time.strftime("%Y_%m_%d_%H_%M") + '.json'
 
+            logging.warning("crawl truck data file is %s", fn)
             r = self.crawl_truck_track(
                 g7_login=g7_login, truck=truck, s_time=s_time, e_time=e_time)
             if r is None:
                 break
+            elif r == 'Retry':
+                retry_cnt = retry_cnt + 1
+                if retry_cnt > 5:
+                    break
+                r = self.crawl_truck_track(
+                    g7_login=g7_login, truck=truck,
+                    s_time=s_time, e_time=e_time)
 
             tracks = r['data']['result']['detail']
             if tracks != []:
@@ -222,6 +258,7 @@ class G7DataCrawler():
 
     def crawl_truck_track(self, g7_login, truck,
                           s_time, e_time, page_size=1000):
+
         self.set_trucks_track_form(
             g7_login=g7_login, truck=truck, s_time=s_time, e_time=e_time)
         r = g7_login.post_url(
@@ -229,12 +266,17 @@ class G7DataCrawler():
             params=self.trucks_track_param,
             form_data=self.trucks_track_form)
         logging.debug('truck track data: ' + str(r))
+        logging.warning('truck track data start_time %s', s_time)
 
         if 'data' in r:
             detail = r['data']['result']['detail']
+        elif r['code'] == 401:
+            logging.critical('data crawl wrong! response is: ' + str(r))
+            return 'Retry'
         else:
             logging.critical('data crawl wrong! response is: ' + str(r))
             return None
+
         if len(detail) == page_size:
             s_time = datetime.datetime.fromtimestamp(
                 detail[page_size - 1]['timestamp'])

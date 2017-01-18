@@ -51,7 +51,8 @@ def get_four_point(session_tracks):
 def write_session_poi(csv_writer, session_tracks):
     poi = get_four_point(session_tracks)
     session_id = session_tracks[0]['session_id']
-    poi.update({'session_id': session_id})
+    ts = session_tracks[0]['timestamp']
+    poi.update({'session_id': session_id, 'timestamp': ts})
     # pdb.set_trace()
     csv_writer.writerow(poi)
 
@@ -101,6 +102,7 @@ def seg_session2(truck_file_name_pattern, session_window=15):
                     writer.writeheader()
 
                     poi_header = ['session_id',
+                                  'timestamp',
                                   'avg_speed_city',
                                   'avg_speed_street',
                                   'avg_speed_address',
